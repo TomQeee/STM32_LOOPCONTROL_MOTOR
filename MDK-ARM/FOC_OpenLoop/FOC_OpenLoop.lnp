@@ -1,0 +1,28 @@
+--cpu Cortex-M3
+"foc_openloop\startup_stm32f103xb.o"
+"foc_openloop\bldc_openloop.o"
+"foc_openloop\foc_utils.o"
+"foc_openloop\as5600.o"
+"foc_openloop\main.o"
+"foc_openloop\stm32f1xx_it.o"
+"foc_openloop\stm32f1xx_hal_msp.o"
+"foc_openloop\stm32f1xx_hal_gpio_ex.o"
+"foc_openloop\stm32f1xx_hal_i2c.o"
+"foc_openloop\stm32f1xx_hal.o"
+"foc_openloop\stm32f1xx_hal_rcc.o"
+"foc_openloop\stm32f1xx_hal_rcc_ex.o"
+"foc_openloop\stm32f1xx_hal_gpio.o"
+"foc_openloop\stm32f1xx_hal_dma.o"
+"foc_openloop\stm32f1xx_hal_cortex.o"
+"foc_openloop\stm32f1xx_hal_pwr.o"
+"foc_openloop\stm32f1xx_hal_flash.o"
+"foc_openloop\stm32f1xx_hal_flash_ex.o"
+"foc_openloop\stm32f1xx_hal_exti.o"
+"foc_openloop\stm32f1xx_hal_tim.o"
+"foc_openloop\stm32f1xx_hal_tim_ex.o"
+"foc_openloop\stm32f1xx_hal_uart.o"
+"foc_openloop\system_stm32f1xx.o"
+--library_type=microlib --strict --scatter "FOC_OpenLoop\FOC_OpenLoop.sct"
+--summary_stderr --info summarysizes --map --load_addr_map_info --xref --callgraph --symbols
+--info sizes --info totals --info unused --info veneers
+--list "FOC_OpenLoop.map" -o FOC_OpenLoop\FOC_OpenLoop.axf
