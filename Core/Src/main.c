@@ -25,7 +25,9 @@
 #include <stdio.h>
 #include "as5600.h"
 #include <stdlib.h>
-#include <string.h>   // 提供 strlen 函数
+#include <string.h>
+
+// 提供 strlen 函数
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -52,15 +54,14 @@ TIM_HandleTypeDef htim4;
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
-float target_velocity = 5.0f;   // 目标速度（保持不变，用于开环控制）
-float test_angle = 0.0f;
-float prev_angle = 0.0f;      // 上一次的角度值
-float current_speed = 0.0f;   // 当前实际速度 (rad/s)
-uint32_t last_angle_time = 0; // 上一次读取角度的时间戳
-char cmd_buf[20];          // 串口命令缓冲区
-uint8_t cmd_idx = 0;       // 缓冲区索引
-uint8_t rx_temp;           // 串口接收临时变量
-uint8_t motor_running = 1; //1运行，0停机
+float target_velocity = 3.0f;
+float current_speed = 0.0f;
+char cmd_buf[20];
+uint8_t cmd_idx = 0;
+uint8_t rx_temp;
+uint8_t motor_running = 1;
+
+#define SPEED_FILTER_ALPHA 0.02f   //一阶低通滤波系数 0.05~0.2
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -91,7 +92,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-	static uint32_t last_test_print = 0;
+
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -117,14 +118,24 @@ int main(void)
   MX_USART1_UART_Init();
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
-	
-  OpenLoop_Init();                    // 启动 PWM 输出
-  HAL_TIM_Base_Start_IT(&htim4);     // 启动 1ms 中断
-	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_SET); // 准备好之后才打开驱动（EN接PB9）
-	__HAL_UART_CLEAR_FLAG(&huart1, UART_FLAG_ORE);
-  __HAL_UART_CLEAR_FLAG(&huart1, UART_FLAG_NE);
-  HAL_UART_Receive_IT(&huart1, &rx_temp, 1); // 启动串口接收中断
-	Speed_Loop_ResetIntegral();
+OpenLoop_Init();
+HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_SET);
+
+AS5600_ResetState(&hi2c1);
+
+//==== 删除这里的 int g_sensor_direction / float g_zero_electric_angle！不要在这里赋值！====
+//CalibrateMagnetZero(&hi2c1);
+
+motor_running = 0;  //上电默认关闭闭环，等待R命令启动
+
+HAL_TIM_Base_Start_IT(&htim4);
+
+__HAL_UART_CLEAR_FLAG(&huart1, UART_FLAG_ORE);
+__HAL_UART_CLEAR_FLAG(&huart1, UART_FLAG_NE);
+HAL_UART_Receive_IT(&huart1, &rx_temp, 1);
+
+Speed_Loop_ResetIntegral();
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -165,25 +176,33 @@ int main(void)
 //    }
 //}
 //打印速度
-if(HAL_GetTick() - last_angle_time >= 50)   // 每 50ms 计算并发送一次
-{
-    float angle_now = AS5600_ReadAngle(&hi2c1);
-    
-    float delta = angle_now - prev_angle;
-    if(delta > 180.0f) delta -= 360.0f;
-    else if(delta < -180.0f) delta += 360.0f;
-    
-    float dt = (float)(HAL_GetTick() - last_angle_time) / 1000.0f;
-    current_speed = (delta / dt) * (3.14159f / 180.0f);
-    
-    prev_angle = angle_now;
-    last_angle_time = HAL_GetTick();
-    
-    // 立即发送速度数据（50ms 一次）
-    printf("%.3f,\n", -current_speed);
-}
+    // 每100ms打印一次角度和速度（用于VOFA+观察）
+//Test_VirtualOpenLoop(1.0f, 8.0f);
+
+static uint32_t last_enc_tick = 0;
+    if(HAL_GetTick() - last_enc_tick >= 2U)
+    {
+        AS5600_Task(&hi2c1);
+        last_enc_tick = HAL_GetTick();
+    }
+
+    static uint32_t last_print = 0;
+    if (HAL_GetTick() - last_print >= 50)
+    {
+        float ang = AS5600_GetContinuousAngle_NoI2C();
+        printf("%.3f,%.3f\n", ang, -current_speed / POLE_PAIRS * g_sensor_direction);
+        last_print = HAL_GetTick();
+    }
 
 
+
+
+
+
+		
+		
+		
+		
 
   }
   /* USER CODE END 3 */
@@ -441,80 +460,70 @@ static void MX_GPIO_Init(void)
 
 
 //速度环更新
+//void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+//{
+//    if (htim->Instance == TIM4)
+//    {
+//        static float prev_ang_isr = 0.0f;
+//        float mech_ang_now = AS5600_GetContinuousAngle_NoI2C();
+//        const float dt = 0.001f;
+
+//        float speed_raw = (mech_ang_now - prev_ang_isr) / dt;
+//        prev_ang_isr = mech_ang_now;
+
+//        //一阶低通滤波
+//        static float speed_filt = 0.0f;
+//        speed_filt = speed_filt * (1.0f - SPEED_FILTER_ALPHA) + SPEED_FILTER_ALPHA * speed_raw;
+//        current_speed = speed_filt;
+
+//        if(motor_running == 1)
+//        {
+//            Speed_Loop_Run(target_velocity, current_speed, mech_ang_now);
+//        }
+//    }
+//}
+
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-    if(htim->Instance == TIM4)
+    if (htim->Instance == TIM4)
     {
-        if(motor_running == 1) //只有运行状态，才跑速度闭环
+        static uint16_t loop_cnt = 0;
+        static float prev_ang_isr = 0.0f;
+        static float speed_filt = 0.0f;
+        float mech_ang_now = AS5600_GetContinuousAngle_NoI2C();
+
+        if(++loop_cnt >= 2)
         {
-            Speed_Loop_Run(target_velocity, current_speed);
+            loop_cnt = 0;
+            const float dt = 0.002f;
+            float speed_mech = (mech_ang_now - prev_ang_isr) / dt;
+            prev_ang_isr = mech_ang_now;
+            // !!! 删掉 * g_sensor_direction，不要再次翻转速度符号！角度已经在OpenLoop_RunVoltage处理方向
+            float speed_elec = speed_mech * POLE_PAIRS;
+            speed_filt = speed_filt * (1.0f - SPEED_FILTER_ALPHA) + SPEED_FILTER_ALPHA * speed_elec;
+        }
+        current_speed = speed_filt;
+
+        if(motor_running == 1)
+        {
+            // 目标机械速度转电角速度，target_velocity *极对数
+            Speed_Loop_Run(target_velocity * POLE_PAIRS, current_speed, mech_ang_now);
         }
     }
 }
 
-//void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
-//{
-//    if(huart->Instance == USART1)
-//    {
-//        HAL_UART_Receive_IT(&huart1, &rx_temp, 1);  // 继续接收下一字节
 
-//        if(rx_temp == '\r')
-//        {
-//            // 遇到\r直接丢弃，不解析，等待后面的\n
-//        }
-//        else if(rx_temp == '\n')
-//        {
-//            // 真正帧结束：收到\n才解析
-//            cmd_buf[cmd_idx] = '\0';
 
-//            if(cmd_buf[0] == 'H' || cmd_buf[0] == 'h')
-//            {
-//                const char *reply = "Hello! STM32 ready.\r\n";
-//                HAL_UART_Transmit(&huart1, (uint8_t*)reply, strlen(reply), 100);
-//            }
-//            else if(cmd_buf[0] == 'T' || cmd_buf[0] == 't')
-//            {
-//                float new_speed = atof(&cmd_buf[1]);
-//                if(new_speed >= 0.0f && new_speed <= 30.0f)
-//                {
-//                    target_velocity = new_speed;
-//									  Speed_Loop_ResetIntegral();
-//                    char ack[40];
-//                    sprintf(ack, "Speed set to %.2f rad/s\r\n", new_speed);
-//                    HAL_UART_Transmit(&huart1, (uint8_t*)ack, strlen(ack), 100);
-//                }
-//                else
-//                {
-//                    const char *err = "Invalid speed! (0 ~ 30 rad/s)\r\n";
-//                    HAL_UART_Transmit(&huart1, (uint8_t*)err, strlen(err), 100);
-//                }
-//            }
-//            else if(cmd_buf[0] != '\0')
-//            {
-//                const char *unknown = "Unknown command.\r\n";
-//                HAL_UART_Transmit(&huart1, (uint8_t*)unknown, strlen(unknown), 100);
-//            }
-//            cmd_idx = 0; // 解析完成才重置索引
-//        }
-//        else if(cmd_idx < sizeof(cmd_buf) - 1)
-//        {
-//            //普通字符存入缓冲区
-//            cmd_buf[cmd_idx++] = (char)rx_temp;
-//        }
-//    }
-//}
+
+
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
     if(huart->Instance == USART1)
     {
-        HAL_UART_Receive_IT(&huart1, &rx_temp, 1);  // 继续接收下一字节
-
-        // 遇到 \r 或 \n 都视为命令结束
+        HAL_UART_Receive_IT(&huart1, &rx_temp, 1);
         if(rx_temp == '\r' || rx_temp == '\n')
         {
-            // 如果缓冲区为空（连续收到 \r\n），则忽略第二次
             if(cmd_idx == 0) return;
-
             cmd_buf[cmd_idx] = '\0';
 
             if(cmd_buf[0] == 'H' || cmd_buf[0] == 'h')
@@ -539,7 +548,6 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
                     HAL_UART_Transmit(&huart1, (uint8_t*)err, strlen(err), 100);
                 }
             }
-						//====下面新增S停机、R启动命令====
             else if(cmd_buf[0] == 'S' || cmd_buf[0] == 's')
             {
                 motor_running = 0;
@@ -563,28 +571,24 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
                     target_velocity = 5.0f;
                 }
                 Speed_Loop_ResetIntegral();
+                AS5600_ResetState(&hi2c1); //重启刷新编码器状态
                 char ack[40];
                 sprintf(ack,"RUN speed:%.2f rad/s\r\n",target_velocity);
                 HAL_UART_Transmit(&huart1,(uint8_t*)ack,strlen(ack),100);
             }
-            //====新增结束====
             else if(cmd_buf[0] != '\0')
             {
                 const char *unknown = "Unknown command.\r\n";
                 HAL_UART_Transmit(&huart1, (uint8_t*)unknown, strlen(unknown), 100);
             }
-            cmd_idx = 0; // 重置缓冲区
+            cmd_idx = 0;
         }
         else if(cmd_idx < sizeof(cmd_buf) - 1)
         {
             cmd_buf[cmd_idx++] = (char)rx_temp;
         }
-
     }
-
-
-	}
-
+}
 
 
 

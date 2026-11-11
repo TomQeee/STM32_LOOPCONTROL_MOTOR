@@ -31,3 +31,6 @@ foc_openloop\bldc_openloop.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_
 foc_openloop\bldc_openloop.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_tim_ex.h
 foc_openloop\bldc_openloop.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_uart.h
 foc_openloop\bldc_openloop.o: ../Core/Inc/foc_utils.h
+foc_openloop\bldc_openloop.o: ../Core/Inc/as5600.h
+foc_openloop\bldc_openloop.o: F:\Tool6\KEIL\core\ARM\ARMCC\Bin\..\include\stdio.h
+foc_openloop\bldc_openloop.o: F:\Tool6\KEIL\core\ARM\ARMCC\Bin\..\include\math.h
