@@ -4,10 +4,10 @@
 
 #define POLE_PAIRS         7
 #define VOLTAGE_POWER_SUPPLY  12.0f
-#define VOLTAGE_LIMIT         2.0f
+#define VOLTAGE_LIMIT         8.0f
 
-#define SPEED_KP  0.005f
-#define SPEED_KI  0.001f
+#define SPEED_KP  0.3f
+#define SPEED_KI  1.0f
 
 #define voltage_sensor_align 2.0f  //标定用电压，不要太大！
 

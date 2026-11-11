@@ -36,9 +36,9 @@ static void SetPhaseVoltage(float Uq, float angle_el)
     //??? 这里不再 + ELECTRICAL_OFFSET！外部已经处理完zero_electric_angle
     angle_el_local = _normalizeAngle(angle_el_local);
 
-    float Ta = 0.5f + 0.5f * _sin(angle_el_local);
-    float Tb = 0.5f + 0.5f * _sin(angle_el_local - 2.094395102f);
-    float Tc = 0.5f + 0.5f * _sin(angle_el_local + 2.094395102f);
+    float Ta = 0.5f + 0.5f * _sin(angle_el_local) * Uout;
+    float Tb = 0.5f + 0.5f * _sin(angle_el_local - 2.094395102f) * Uout;
+    float Tc = 0.5f + 0.5f * _sin(angle_el_local + 2.094395102f) * Uout;
 
     __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, (uint32_t)(Ta * PWM_PERIOD));
     __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, (uint32_t)(Tb * PWM_PERIOD));
@@ -59,15 +59,14 @@ void Speed_Loop_Run(float target_speed, float current_speed, float mech_angle)
 {
     float error = target_speed - current_speed;
     float p_out = SPEED_KP * error;
-    speed_integral += SPEED_KI * error;
+    speed_integral += SPEED_KI * error * 0.001f;
 
     if (speed_integral > VOLTAGE_LIMIT)  speed_integral = VOLTAGE_LIMIT;
     if (speed_integral < -VOLTAGE_LIMIT) speed_integral = -VOLTAGE_LIMIT;
 
     float voltage_out = p_out + speed_integral;
 
-    // ==========重点！PI输出是机械速度域，乘以极对数，转为电角速度域Iq电压！==========
-    voltage_out = voltage_out * POLE_PAIRS;
+    // Speed loop output = q-axis voltage Uq (mechanical rad/s error -> volts)
 
     // 再重新限幅，防止放大之后超压
     if (voltage_out > VOLTAGE_LIMIT)  voltage_out = VOLTAGE_LIMIT;

@@ -54,12 +54,12 @@ TIM_HandleTypeDef htim4;
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
-float target_velocity = 3.0f;
-float current_speed = 0.0f;
+volatile float target_velocity = 3.0f;
+volatile float current_speed = 0.0f;
 char cmd_buf[20];
 uint8_t cmd_idx = 0;
 uint8_t rx_temp;
-uint8_t motor_running = 1;
+volatile uint8_t motor_running = 1;
 
 #define SPEED_FILTER_ALPHA 0.02f   //一阶低通滤波系数 0.05~0.2
 /* USER CODE END PV */
@@ -187,18 +187,20 @@ static uint32_t last_enc_tick = 0;
     }
 
     static uint32_t last_print = 0;
-    if (HAL_GetTick() - last_print >= 25)
+    if (HAL_GetTick() - last_print >= 20)
     {
-        float ang = AS5600_GetContinuousAngle_NoI2C();
-        float ang_deg = ang * 180.0f / 3.14159265f;
-float ang_mod = fmodf(ang_deg, 360.0f);
-if(ang_mod < 0) ang_mod += 360.0f;
+        float mech_angle = AS5600_GetContinuousAngle_NoI2C();
 
-//current_speed是【电角速度】，转回机械rad/s显示
+        // Sine of the mechanical angle -> clean sine wave (1 cycle per revolution)
+        float sin_mech = sinf(mech_angle);
 
-float rps = current_speed / 6.2831853f;   // 圈/秒 (revolutions per second)
+        // Mechanical angle in degrees, wrapped to 0..360 (sawtooth)
+        float ang_deg = mech_angle * 180.0f / 3.14159265f;
+        float ang_mod = fmodf(ang_deg, 360.0f);
+        if (ang_mod < 0.0f) ang_mod += 360.0f;
 
-printf("%.3f,%.3f\n", ang_mod, rps);
+        // Speed in mechanical rad/s (same unit as the R/T commands)
+        printf("%.3f,%.3f,%.3f,%.3f\n", sin_mech, ang_mod, current_speed, target_velocity);
         last_print = HAL_GetTick();
     }
 
@@ -504,8 +506,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         {
             loop_cnt = 0;
             const float dt = 0.002f;
-            // 机械角速度，不带任何方向因子！
-            float speed_mech = (mech_ang_now - prev_ang_isr) / dt;
+            // Mechanical speed, flipped into the same frame as commutation
+            float speed_mech = (mech_ang_now - prev_ang_isr) / dt * g_sensor_direction;
             prev_ang_isr = mech_ang_now;
             speed_filt = speed_filt * (1.0f - SPEED_FILTER_ALPHA) + SPEED_FILTER_ALPHA * speed_mech;
         }
