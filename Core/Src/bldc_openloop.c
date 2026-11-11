@@ -59,8 +59,6 @@ void Speed_Loop_Run(float target_speed, float current_speed, float mech_angle)
 {
     float error = target_speed - current_speed;
     float p_out = SPEED_KP * error;
-
-    // ?正确PI：先累加积分，再积分限幅
     speed_integral += SPEED_KI * error;
 
     if (speed_integral > VOLTAGE_LIMIT)  speed_integral = VOLTAGE_LIMIT;
@@ -68,7 +66,10 @@ void Speed_Loop_Run(float target_speed, float current_speed, float mech_angle)
 
     float voltage_out = p_out + speed_integral;
 
-    //输出限幅
+    // ==========重点！PI输出是机械速度域，乘以极对数，转为电角速度域Iq电压！==========
+    voltage_out = voltage_out * POLE_PAIRS;
+
+    // 再重新限幅，防止放大之后超压
     if (voltage_out > VOLTAGE_LIMIT)  voltage_out = VOLTAGE_LIMIT;
     if (voltage_out < -VOLTAGE_LIMIT) voltage_out = -VOLTAGE_LIMIT;
 

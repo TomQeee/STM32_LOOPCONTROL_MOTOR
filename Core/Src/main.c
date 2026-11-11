@@ -26,7 +26,7 @@
 #include "as5600.h"
 #include <stdlib.h>
 #include <string.h>
-
+#include <math.h>
 // 提供 strlen 函数
 /* USER CODE END Includes */
 
@@ -187,10 +187,18 @@ static uint32_t last_enc_tick = 0;
     }
 
     static uint32_t last_print = 0;
-    if (HAL_GetTick() - last_print >= 50)
+    if (HAL_GetTick() - last_print >= 25)
     {
         float ang = AS5600_GetContinuousAngle_NoI2C();
-        printf("%.3f,%.3f\n", ang, -current_speed / POLE_PAIRS * g_sensor_direction);
+        float ang_deg = ang * 180.0f / 3.14159265f;
+float ang_mod = fmodf(ang_deg, 360.0f);
+if(ang_mod < 0) ang_mod += 360.0f;
+
+//current_speed是【电角速度】，转回机械rad/s显示
+
+float rps = current_speed / 6.2831853f;   // 圈/秒 (revolutions per second)
+
+printf("%.3f,%.3f\n", ang_mod, rps);
         last_print = HAL_GetTick();
     }
 
@@ -496,22 +504,21 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         {
             loop_cnt = 0;
             const float dt = 0.002f;
+            // 机械角速度，不带任何方向因子！
             float speed_mech = (mech_ang_now - prev_ang_isr) / dt;
             prev_ang_isr = mech_ang_now;
-            // !!! 删掉 * g_sensor_direction，不要再次翻转速度符号！角度已经在OpenLoop_RunVoltage处理方向
-            float speed_elec = speed_mech * POLE_PAIRS;
-            speed_filt = speed_filt * (1.0f - SPEED_FILTER_ALPHA) + SPEED_FILTER_ALPHA * speed_elec;
+            speed_filt = speed_filt * (1.0f - SPEED_FILTER_ALPHA) + SPEED_FILTER_ALPHA * speed_mech;
         }
+        // current_speed：机械rad/s
         current_speed = speed_filt;
 
         if(motor_running == 1)
         {
-            // 目标机械速度转电角速度，target_velocity *极对数
-            Speed_Loop_Run(target_velocity * POLE_PAIRS, current_speed, mech_ang_now);
+            // target_velocity 本身就是你T命令设置的【机械rad/s】，直接丢进去，不乘方向！
+            Speed_Loop_Run(target_velocity, current_speed, mech_ang_now);
         }
     }
 }
-
 
 
 

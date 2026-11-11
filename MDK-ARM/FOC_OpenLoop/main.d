@@ -34,3 +34,4 @@ foc_openloop\main.o: F:\Tool6\KEIL\core\ARM\ARMCC\Bin\..\include\stdio.h
 foc_openloop\main.o: ../Core/Inc/as5600.h
 foc_openloop\main.o: F:\Tool6\KEIL\core\ARM\ARMCC\Bin\..\include\stdlib.h
 foc_openloop\main.o: F:\Tool6\KEIL\core\ARM\ARMCC\Bin\..\include\string.h
+foc_openloop\main.o: F:\Tool6\KEIL\core\ARM\ARMCC\Bin\..\include\math.h
